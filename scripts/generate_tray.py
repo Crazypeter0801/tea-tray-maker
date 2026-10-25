@@ -6,8 +6,11 @@ import argparse
 import json
 from pathlib import Path
 from collections import Counter
+import sys
 import cadquery as cq
 from OCP.BRepBndLib import BRepBndLib
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from OCP.Bnd import Bnd_Box
 
 LENGTH, WIDTH, HEIGHT = 240.0, 148.3, 12.0
@@ -209,14 +212,22 @@ def main():
              'ridge_base_width_mm': RIDGE_BASE_WIDTH,
              'center_hole_floor_diameter_mm': 2 * FIRST_RING_RADIUS - RIDGE_BASE_WIDTH,
              'center_hole_top_diameter_mm': 2 * FIRST_RING_RADIUS - RIDGE_TOP_WIDTH}
+    # 筋宽是否接近整数根挤出线（不是的话筋顶正中会多一根被撑宽的补缝线）
+    from rib_width import predict
+    stats['rib_strand_check'] = {
+        f'layer_{h}': {k: v for k, v in predict(RIDGE_TOP_WIDTH, layer=h).items()
+                       if k in ('strands', 'lines_mm', 'middle_growth_pct', 'verdict', 'nearest_good_mm')}
+        for h in (0.12, 0.2)}
+    stats['rib_strand_check']['note'] = ('Prediction for Bambu 0.4 nozzle default widths (0.42/0.45), '
+                                         'fully solid ribs; confirm in the slicer preview')
     stats['geometric_capacity_ml'] = {}
     for level in sorted(set((FLOOR + GROOVE_DEPTH - 1, FLOOR + GROOVE_DEPTH, HEIGHT - 1))):
         if level <= FLOOR:
             continue
         water = rounded_prism(RIM_WIDTH, FLOOR, level - FLOOR).cut(shape)
         stats['geometric_capacity_ml'][str(level)] = water.Volume() / 1000
-    (out / 'validation.json').write_text(json.dumps(stats, indent=2))
-    print(json.dumps(stats, indent=2), flush=True)
+    (out / 'validation.json').write_text(json.dumps(stats, indent=2, ensure_ascii=False))
+    print(json.dumps(stats, indent=2, ensure_ascii=False), flush=True)
 
 
 if __name__ == '__main__':

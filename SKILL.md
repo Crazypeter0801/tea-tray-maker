@@ -23,25 +23,27 @@ description: 根据参考图、杯具尺寸和打印机约束生成可编辑、�
 
 ## 建模流程
 
-1. **布局**：外形与内侧可用区分开；杯体不撞边、杯脚落在同高支撑筋上。大圆角会缩小角部空间，不能只比包围盒。对杯脚跨沟的情况检查多个位置，不能用整体纹顶面积替代稳定性。
+1. **布局**：外形与内侧可用区分开；杯体不撞边、杯脚落在同高支撑筋上。大圆角会缩小角部空间，不能只比包围盒。杯脚跨沟时用 `cup_stability.py` 在实际 STL 上逐点检查（见 [建模依据](references/design-rules.md#杯脚稳定性)），不能用整体纹顶面积替代稳定性。
 2. **结构**：连续底板 + 围边 + 与底板融合的筋。明确底厚、筋高、围边顶面高度及溢水余量。加深储水区要明确是抬高筋、抬高围边还是减薄底板，不联动改变用户未要求的尺寸。纹理要留可清洁的沟与出水路径；不能仅靠总空腔体积推断每个槽都排得干净。
-3. **纹理**：分别控制中心距、筋宽、净沟宽、纹理组间隔、边框排水沟。使用真实圆弧/曲面建模，再裁切纹理域；删除切边形成的短薄碎片并检查断头和尖角。所选例子及其局限见 [建模依据](references/design-rules.md)。
+3. **纹理**：分别控制中心距、筋宽、净沟宽、纹理组间隔、边框排水沟。筋宽和围边宽先用 `rib_width.py` 对齐挤出线（宽度落在两个整数根料之间时筋顶正中会多一根补缝线），再定美观；纹理在沿边集水槽的等距轮廓上统一切齐。使用真实圆弧/曲面建模，再裁切纹理域；删除切边形成的短薄碎片并检查断头和尖角。所选例子及其局限见 [建模依据](references/design-rules.md)。
 4. **导出**：保持 mm、XY 底面、+Z 向上；提供可编辑源码、STEP、STL，另存新目录，不覆盖用户原件。运行为当前设计编写的生成器（波纹构图可用下方示例），再运行通用网格检查并查看实际网格预览。不要拿示意渲染代替导出几何检查。
 5. **切片**：有用户的打印机信息及 Bambu Studio 时，按 [切片与打印验证](references/slicing.md) 创建工程、切片、重新打开核对。没有切片环境则交付几何文件并标明“待切片”，不伪造打印配置 3MF。
 
 ## 可选的波纹起点与通用检查
 
-依赖 Python 3.11、CadQuery 2.5.2；网格检查用 trimesh/numpy，预览用 VTK。优先复用已有可用环境；以下 uv 命令是便携安装方式。
+依赖 Python 3.11、CadQuery 2.5.2；网格检查用 trimesh/numpy，预览用 VTK，杯脚稳定性另需 pillow/matplotlib；`rib_width.py` 只用标准库。优先复用已有可用环境；以下 uv 命令是便携安装方式。
 
 ```bash
 uv run --python 3.11 --with cadquery==2.5.2 python <skill>/scripts/generate_tray.py --out <project>/output
 uv run --python 3.11 --with trimesh --with numpy python <skill>/scripts/check_mesh.py <project>/output/tea_tray.stl --cad-report <project>/output/validation.json --out <project>/output/mesh_check.json
 uv run --python 3.11 --with vtk python <skill>/scripts/preview_mesh.py <project>/output/tea_tray.stl --out <project>/output/preview.png
+uv run --python 3.11 --with trimesh --with numpy --with pillow --with matplotlib python <skill>/scripts/cup_stability.py <project>/output/tea_tray.stl --out-dir <project>/output --foot 30 --foot 45:flat
+python3 <skill>/scripts/rib_width.py --layer 0.12 --check 2.2 --suggest
 ```
 
 把 `<skill>`、`<project>` 换成真实路径；含空格的路径加引号。
 
-默认重建历史波纹样例：240 × 148.3 × 12 mm，底厚 3 mm、筋高 6 mm、等宽筋 2.2 mm、名义中心距 5.5 mm。可用 `--length --width --height --floor --rib-height --rib-width --pitch` 修改。布局比例只在脚本声明的范围内适用；其他轮廓/复杂装饰应复制脚本到项目后改源码，不用强行缩放成品 STL。缩放模型会连同筋宽、底厚一起改变。
+默认重建历史波纹样例：240 × 148.3 × 12 mm，底厚 3 mm、筋高 6 mm、等宽筋 2.2 mm、名义中心距 5.5 mm。可用 `--length --width --height --floor --rib-height --rib-width --pitch` 修改。默认 2.2 mm 筋宽只为复现历史；它在 0.12 层高下会让筋顶正中多一根被撑宽 25% 的料（实物上是中线），新设计按 `rib_width.py` 的建议改（如 1.70 或 2.55）。布局比例只在脚本声明的范围内适用；其他轮廓/复杂装饰应复制脚本到项目后改源码，不用强行缩放成品 STL。缩放模型会连同筋宽、底厚一起改变。
 
 每次生成都会写 `validation.json`，报告 CAD 有效性、单实体、尺寸、实际纹理间距、几何容量。所有用户确认、切片、试印标志初始为 false；检查完成后另写带文件名/版本的验证记录，不能在脚本中预设通过。
 
@@ -49,9 +51,10 @@ uv run --python 3.11 --with vtk python <skill>/scripts/preview_mesh.py <project>
 
 - CAD 有效、单实体；导出的 STL 封闭、绕向一致、无边界/非流形边、单连通、正体积，并与 CAD 尺寸和体积相符。`check_mesh.py` 失败必须修复，成功也不证明没有所有自相交或薄壁风险。
 - 实际预览检查：底板连续，筋连接到底板，无意外碎片，纹理交界和圆角处无明显薄片；杯具布局和清洁沟可用。
+- 杯脚稳定性：按用户杯脚直径输出 `cup_stability.png/json`，报告单侧受力位置数与指定摆位结果；有黑点区域时标出可放杯区，或给出加筋/改摆位的前后对比让用户选，不擅自改已确认的图案。
 - 容量注明水位和几何估算，不称为实测储水量；未试水不能声称不漏水。材料、喷嘴兼容性和温度按实际耗材厂商说明确认，不声称耐沸水或食品级。
 - 切片报告注明打印机/喷嘴/材料/板型、关键设置及未验证项。必须区分“几何通过”“切片通过”“实物试印通过”；模拟切片时长不能当成实测耗时。
-- 发现抬线、线间缝或翘曲时，优先检查真实切片路径与实物范围，做含直筋/弧筋/边框的小样。不要把增加墙数、切 Arachne、升温或改固件写成万能修复。
+- 发现抬线、线间缝或翘曲时，优先检查真实切片路径与实物范围，做含直筋/弧筋/边框的小样。筋顶中线先查筋宽是否整数根料；底座最后一层先查是否被判成 Bridge。墙数、infill_wall_overlap、内部实心线宽在历史实测中都改不掉中线，不要把加墙、切 Arachne、升温或改固件写成万能修复。
 
 ## 交付及上传衔接
 

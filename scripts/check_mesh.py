@@ -7,6 +7,24 @@ import numpy as np
 import trimesh
 
 
+def count_components(mesh):
+    """Face-connected parts via union-find; avoids trimesh's optional graph engines
+    (mesh.split needs networkx/scipy and raises 'no graph engines available' without them)."""
+    parent = np.arange(len(mesh.faces))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for a, b in mesh.face_adjacency:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+    return len({find(i) for i in range(len(parent))})
+
+
 def check(path, cad_report=None):
     mesh = trimesh.load(path, force='mesh', process=True)
     if not len(mesh.faces):
@@ -16,7 +34,7 @@ def check(path, cad_report=None):
                   winding_consistent=bool(mesh.is_winding_consistent),
                   is_volume=bool(mesh.is_volume), boundary_edges=int((counts == 1).sum()),
                   nonmanifold_edges=int((counts > 2).sum()),
-                  connected_components=len(mesh.split(only_watertight=False)),
+                  connected_components=count_components(mesh),
                   dimensions_mm=mesh.extents.tolist(), volume_ml=float(mesh.volume / 1000),
                   faces=len(mesh.faces), physical_print_verified=False)
     failures = []
