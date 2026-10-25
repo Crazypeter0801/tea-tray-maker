@@ -1,0 +1,3 @@
+interface:
+  display_name: "可打印茶盘生成"
+  short_description: "从参考图和杯具需求生成参数化茶盘，检查储水纹理、模型网格与切片结果"
